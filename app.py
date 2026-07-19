@@ -92,10 +92,9 @@ def generate_kml(lines, spacing, length):
       </LineStyle>
     </Style>
 """
-  
-   st.markdown("### 🌍 تحديد موقع منطقة الدراسة جغرافياً")
-user_lat = st.number_input("دائرة العرض (Latitude) - كمثال: 31.04", value=31.04, format="%.6f")
-user_lon = st.number_input("خط الطول (Longitude) - كمثال: 31.38", value=31.38, format="%.6f")
+ st.markdown("### 🌍 تحديد موقع منطقة الدراسة جغرافياً")
+ user_lat = st.number_input("دائرة العرض (Latitude) - كمثال: 31.04", value=31.04, format="%.6f")
+ user_lon = st.number_input("خط الطول (Longitude) - كمثال: 31.38", value=31.38, format="%.6f")
 
 for i in range(lines):
     x_coord = i * spacing
