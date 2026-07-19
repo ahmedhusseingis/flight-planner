@@ -93,27 +93,28 @@ def generate_kml(lines, spacing, length):
     </Style>
 """
   
-    for i in range(lines):
-        x_coord = i * spacing
-        kml_content += f"""    <Placemark>
-      <name>Line {i+1}</name>
-      <styleUrl>#yellowLineGreenPoly</styleUrl>
-      <LineString>
-        <coordinates>
-          {x_coord/111000},0,0
-          {x_coord/111000},{length/111000},0
-        </coordinates>
-      </LineString>
-    </Placemark>
+   st.markdown("### 🌍 تحديد موقع منطقة الدراسة جغرافياً")
+user_lat = st.number_input("دائرة العرض (Latitude) - كمثال: 31.04", value=31.04, format="%.6f")
+user_lon = st.number_input("خط الطول (Longitude) - كمثال: 31.38", value=31.38, format="%.6f")
+
+for i in range(lines):
+    x_coord = i * spacing
+    
+
+    lon1 = user_lon + (x_coord / 111000)
+    lat1 = user_lat
+    
+    lon2 = user_lon + (x_coord / 111000)
+    lat2 = user_lat + (area_length / 111000)
+    
+    kml_content += f"""<Placemark>
+<name>Line {i+1}</name>
+<styleUrl>#yellowLineGreenPoly</styleUrl>
+<LineString>
+<coordinates>
+{lon1},{lat1},0
+{lon2},{lat2},0
+</coordinates>
+</LineString>
+</Placemark>
 """
-    kml_content += "  </Document>\n</kml>"
-    return kml_content
-
-kml_data = generate_kml(num_lines, line_spacing, area_length)
-
-st.download_button(
-    label="📥 تحميل ملف خطوط الطيران (KML)",
-    data=kml_data,
-    file_name="AI_Flight_Plan.kml",
-    mime="application/vnd.google-earth.kml+xml"
-)
