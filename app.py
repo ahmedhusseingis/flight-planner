@@ -1,48 +1,119 @@
 import streamlit as st
 import math
 
-st.title("🛸 نظام تخطيط الطيران الذكي (AI Flight Planner)")
-st.subheader("تطوير م/ أحمد حسين - أتمتة حسابات المساحة الجوية")
+CAMERA_DB = {
+    "DJI Mavic 3 Enterprise (M3E)": {
+        "focal_length": 24.0,       
+        "sensor_width": 17.3,       
+        "sensor_height": 13.0,      
+        "pixel_width": 5280,        
+        "pixel_height": 3956        
+    },
+    "DJI Phantom 4 RTK": {
+        "focal_length": 8.8,        
+        "sensor_width": 13.2,       
+        "sensor_height": 8.8,       
+        "pixel_width": 5472,        
+        "pixel_height": 3648        
+    },
+    "DJI Zenmuse P1 (Matrice 350)": {
+        "focal_length": 35.0,       
+        "sensor_width": 35.9,       
+        "sensor_height": 24.0,      
+        "pixel_width": 8192,        
+        "pixel_height": 5460        
+    }
+}
 
-st.markdown("---")
+st.title("🛸 AI Flight Planner (Beta v2.0)")
+st.write("تخطيط الطيران الجوي الذكي وحساب معايير السلامة")
+
+st.header("⚙️ إعدادات المشروع والكاميرا")
+
+
+camera_choice = st.selectbox("اختر نوع كاميرا الدرون:", list(CAMERA_DB.keys()))
+cam = CAMERA_DB[camera_choice]
+
+gsd = st.number_input("الدقة المطلوبة على الأرض GSD (سم/بكسل):", min_value=0.5, max_value=20.0, value=3.0)
+p_overlap = st.slider("الـ Overlap الطولي (Sidelap) %:", 50, 90, 70)
+q_overlap = st.slider("الـ Overlap العرضي (Frontlap) %:", 50, 90, 80)
+wind_speed = st.number_input("سرعة الرياح الحالية في الموقع (كم/ساعة):", min_value=0.0, max_value=60.0, value=15.0)
+
+st.subheader("🗺️ أبعاد المنطقة المراد رفعها")
+area_width = st.number_input("عرض المنطقة (متر):", min_value=100, value=1000)
+area_length = st.number_input("طول المنطقة (متر):", min_value=100, value=1000)
+
+pixel_size_mm = cam["sensor_width"] / cam["pixel_width"]
+gsd_m = gsd / 100.0
+flight_altitude = (cam["focal_length"] * gsd_m) / pixel_size_mm
+
+ground_w = (cam["sensor_width"] * flight_altitude) / cam["focal_length"]
+ground_h = (cam["sensor_height"] * flight_altitude) / cam["focal_length"]
+
+line_spacing = ground_w * (1 - (p_overlap / 100.0))
+
+ai_safety_factor = 1.0
+if wind_speed > 25.0:
+    ai_safety_factor = 0.85  
+    st.warning("⚠️ الرياح شديدة! الـ AI قام بتقليص المسافة بين اللقطات لضمان التغطية ومنع الفجوات.")
+
+photo_spacing = ground_h * (1 - (q_overlap / 100.0)) * ai_safety_factor
+
+num_lines = math.ceil(area_width / line_spacing)
+photos_per_line = math.ceil(area_length / photo_spacing)
+total_photos = num_lines * photos_per_line
+camera_interval = 2.0  
+max_safe_speed_ms = photo_spacing / camera_interval
+max_safe_speed_kmh = max_safe_speed_ms * 3.6
+st.header("📊 مخرجات خطة الطيران")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.header("⚙️ مدخلات المشروع")
-    project_width = st.number_input("عرض منطقة المشروع (متر)", value=1000)
-    project_length = st.number_input("طول منطقة المشروع (متر)", value=2000)
-    image_width = st.number_input("عرض الصورة على الأرض W (متر)", value=150)
-    image_height = st.number_input("طول الصورة على الأرض H (متر)", value=100)
+    st.metric("ارتفاع الطيران المناسب (H)", f"{flight_altitude:.2f} متر")
+    st.metric("أبعاد الصورة على الأرض", f"{ground_w:.1f}م × {ground_h:.1f}م")
+    st.metric("المسافة بين خطوط الطيران", f"{line_spacing:.2f} متر")
 
 with col2:
-    st.header("💨 ظروف الطيران والطقس")
-    sidelap = st.slider("نسبة التداخل الجانبي (%)", min_value=10, max_value=90, value=60)
-    overlap = st.slider("نسبة التداخل الطولي (%)", min_value=10, max_value=90, value=70)
-    aircraft_speed = st.number_input("سرعة الطائرة (متر/ثانية)", value=12)
-    wind_speed = st.slider("سرعة الرياح الحالية (عقدة)", min_value=0, max_value=40, value=18)
+    st.metric("إجمالي عدد خطوط الطيران", f"{num_lines} خطوط")
+    st.metric("عدد الصور في الخط الواحد", f"{photos_per_line} صورة")
+    st.metric("إجمالي الصور المطلوبة", f"{total_photos} صورة") 
+    st.metric("السرعة القصوى الآمنة", f"{max_safe_speed_kmh:.2f} كم/ساعة")
+st.header("💾 تصدير خطة الطيران")
+def generate_kml(lines, spacing, length):
+   
+    kml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>AI Flight Lines</name>
+    <Style id="yellowLineGreenPoly">
+      <LineStyle>
+        <color>7f00ffff</color>
+        <width>4</width>
+      </LineStyle>
+    </Style>
+"""
+  
+    for i in range(lines):
+        x_coord = i * spacing
+        kml_content += f"""    <Placemark>
+      <name>Line {i+1}</name>
+      <styleUrl>#yellowLineGreenPoly</styleUrl>
+      <LineString>
+        <coordinates>
+          {x_coord/111000},0,0
+          {x_coord/111000},{length/111000},0
+        </coordinates>
+      </LineString>
+    </Placemark>
+"""
+    kml_content += "  </Document>\n</kml>"
+    return kml_content
 
-st.markdown("---")
-if wind_speed > 15:
-    safety_margin_photos = 6
-    st.error(f"⚠️ تحذير: سرعة الرياح ({wind_speed} عقدة) مرتفعة! تم رفع هامش الأمان تلقائياً لـ {safety_margin_photos} صور لضمان التغطية ومنع الفجوات.")
-else:
-    safety_margin_photos = 4
-    st.success(f"✅ الطقس مستقر: سرعة الرياح ({wind_speed} عقدة) آمنة. تم استخدام هامش الأمان القياسي ({safety_margin_photos} صور).")
-SP = image_width * (100 - sidelap) / 100
-NFL = math.ceil((project_width / SP) + 1)
-B = image_height * (100 - overlap) / 100
-NIM = math.ceil((project_length / B) + 1 + safety_margin_photos)
-total_images = NFL * NIM
-time_interval = B / aircraft_speed
-st.header("📌 مخرجات خطة الطيران الفعالة")
+kml_data = generate_kml(num_lines, line_spacing, area_length)
 
-res_col1, res_col2 = st.columns(2)
-with res_col1:
-    st.metric("التباعد بين خطوط الطيران (SP)", f"{SP} متر")
-    st.metric("عدد خطوط الطيران الفعلي (NFL)", f"{NFL} خطوط")
-    st.metric("القاعدة الجوية (B)", f"{B} متر")
-
-with res_col2:
-    st.metric("عدد الصور في الخط الواحد (NIM)", f"{NIM} صور")
-    st.metric("إجمالي صور المشروع بالكامل", f"{total_images} صورة")
-    st.metric("تظبيط تايمر الكاميرا تلقائياً", f"كل {time_interval} ثانية")
+st.download_button(
+    label="📥 تحميل ملف خطوط الطيران (KML)",
+    data=kml_data,
+    file_name="AI_Flight_Plan.kml",
+    mime="application/vnd.google-earth.kml+xml"
+)
